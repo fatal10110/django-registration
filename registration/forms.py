@@ -1,19 +1,19 @@
 """
 Forms and validation code for user registration.
 
+Note that all of these forms assume Django's bundle default ``User``
+model; since it's not possible for a form to anticipate in advance the
+needs of custom user models, you will need to write your own forms if
+you're using a custom model.
+
 """
 
-
 from django.contrib.auth.models import User
+
+from django.contrib.auth import get_user_model
+User = get_user_model()
 from django import forms
 from django.utils.translation import ugettext_lazy as _
-
-
-# I put this on all required fields, because it's easier to pick up
-# on them with CSS or JavaScript if they have a class of "required"
-# in the HTML. Your mileage may vary. If/when Django ticket #3515
-# lands in trunk, this will no longer be necessary.
-attrs_dict = {'class': 'required'}
 
 
 class RegistrationForm(forms.Form):
@@ -27,19 +27,18 @@ class RegistrationForm(forms.Form):
     need, but should avoid defining a ``save()`` method -- the actual
     saving of collected user data is delegated to the active
     registration backend.
-    
+
     """
-    username = forms.RegexField(regex=r'^\w+$',
-                                max_length=30,
-                                widget=forms.TextInput(attrs=attrs_dict),
-                                label=_("Username"),
-                                error_messages={'invalid': _("This value must contain only letters, numbers and underscores.")})
-    email = forms.EmailField(widget=forms.TextInput(attrs=dict(attrs_dict,
-                                                               maxlength=75)),
-                             label=_("Email address"))
-    password1 = forms.CharField(widget=forms.PasswordInput(attrs=attrs_dict, render_value=False),
+    required_css_class = 'required'
+    
+   # username = forms.RegexField(regex=r'^[\w.@+-]+$',
+    #                            max_length=30,
+     #                           label=_("Username"),
+      #                          error_messages={'invalid': _("This value may contain only letters, numbers and @/./+/-/_ characters.")})
+    email = forms.EmailField(label=_("E-mail"))
+    password1 = forms.CharField(widget=forms.PasswordInput,
                                 label=_("Password"))
-    password2 = forms.CharField(widget=forms.PasswordInput(attrs=attrs_dict, render_value=False),
+    password2 = forms.CharField(widget=forms.PasswordInput,
                                 label=_("Password (again)"))
     
     def clean_username(self):
@@ -48,11 +47,11 @@ class RegistrationForm(forms.Form):
         in use.
         
         """
-        try:
-            user = User.objects.get(username__iexact=self.cleaned_data['username'])
-        except User.DoesNotExist:
-            return self.cleaned_data['username']
-        raise forms.ValidationError(_("A user with that username already exists."))
+       # existing = User.objects.filter(username__iexact=self.cleaned_data['username'])
+       # if existing.exists():
+        #    raise forms.ValidationError(_("A user with that username already exists."))
+        #else:
+         #   return self.cleaned_data['username']
 
     def clean(self):
         """
@@ -74,7 +73,7 @@ class RegistrationFormTermsOfService(RegistrationForm):
     for agreeing to a site's Terms of Service.
     
     """
-    tos = forms.BooleanField(widget=forms.CheckboxInput(attrs=attrs_dict),
+    tos = forms.BooleanField(widget=forms.CheckboxInput,
                              label=_(u'I have read and agree to the Terms of Service'),
                              error_messages={'required': _("You must agree to the terms to register")})
 

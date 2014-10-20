@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import random
 import re
 
@@ -7,8 +8,15 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db import transaction
 from django.template.loader import render_to_string
-from django.utils.hashcompat import sha_constructor
 from django.utils.translation import ugettext_lazy as _
+
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+try:
+    from django.utils.timezone import now as datetime_now
+except ImportError:
+    datetime_now = datetime.datetime.now
 
 
 SHA1_RE = re.compile('^[a-f0-9]{40}$')
@@ -92,11 +100,12 @@ class RegistrationManager(models.Manager):
         username and a random salt.
         
         """
-        salt = sha_constructor(str(random.random())).hexdigest()[:5]
+        salt = hashlib.sha1(str(random.random()).encode('utf-8')).hexdigest()[:5]
         username = user.username
-        if isinstance(username, unicode):
+        if isinstance(username, str):#unicode):
             username = username.encode('utf-8')
-        activation_key = sha_constructor(salt+username).hexdigest()
+        buff = str(salt)+str(username)
+        activation_key = hashlib.sha1(buff.encode()).hexdigest()
         return self.create(user=user,
                            activation_key=activation_key)
         
@@ -141,11 +150,14 @@ class RegistrationManager(models.Manager):
         
         """
         for profile in self.all():
-            if profile.activation_key_expired():
-                user = profile.user
-                if not user.is_active:
-                    user.delete()
-
+            try:
+                if profile.activation_key_expired():
+                    user = profile.user
+                    if not user.is_active:
+                        user.delete()
+                        profile.delete()
+            except User.DoesNotExist:
+                profile.delete()
 
 class RegistrationProfile(models.Model):
     """
@@ -201,7 +213,7 @@ class RegistrationProfile(models.Model):
         """
         expiration_date = datetime.timedelta(days=settings.ACCOUNT_ACTIVATION_DAYS)
         return self.activation_key == self.ACTIVATED or \
-               (self.user.date_joined + expiration_date <= datetime.datetime.now())
+               (self.user.date_joined + expiration_date <= datetime_now())
     activation_key_expired.boolean = True
 
     def send_activation_email(self, site):
@@ -245,13 +257,14 @@ class RegistrationProfile(models.Model):
         ctx_dict = {'activation_key': self.activation_key,
                     'expiration_days': settings.ACCOUNT_ACTIVATION_DAYS,
                     'site': site}
-        subject = render_to_string('registration/activation_email_subject.txt',
+        subject = render_to_string('registration/activation_email_subject.html',
                                    ctx_dict)
         # Email subject *must not* contain newlines
         subject = ''.join(subject.splitlines())
         
-        message = render_to_string('registration/activation_email.txt',
+        message = render_to_string('registration/activation_email.html',
                                    ctx_dict)
         
         self.user.email_user(subject, message, settings.DEFAULT_FROM_EMAIL)
+
     
